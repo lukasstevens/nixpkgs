@@ -44,18 +44,27 @@
 , wrapQtAppsHook
 , xercesc
 , zlib
+, realthunderFork ? true # TODO: Set to false
 }:
 
 mkDerivation rec {
   pname = "freecad";
   version = "0.19.2";
 
-  src = fetchFromGitHub {
-    owner = "FreeCAD";
-    repo = "FreeCAD";
-    rev = version;
-    hash = "sha256-XZ+fRl3CPCIFu3nHeMTLibwwFBlG/cWpKJlI58hTAuU=";
-  };
+  src = if realthunderFork then
+    fetchFromGitHub {
+      owner = "realthunder";
+      repo = "FreeCAD";
+      rev = "1d5a2540702ccba56ac1f324103d2a3954e83a0f";
+      sha256 = "1livv7q71bpgd7w8d6d67iwpspibflxk1nyr4cv1l5px4jfd0ivv";
+    }
+  else
+    fetchFromGitHub {
+      owner = "FreeCAD";
+      repo = "FreeCAD";
+      rev = version;
+      hash = "sha256-XZ+fRl3CPCIFu3nHeMTLibwwFBlG/cWpKJlI58hTAuU=";
+    };
 
   nativeBuildInputs = [
     cmake
