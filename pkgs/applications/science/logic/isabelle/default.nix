@@ -1,4 +1,4 @@
-{ lib, stdenv, fetchurl, coreutils, nettools, java, scala, polyml, z3, veriT, vampire, eprover-ho, naproche, rlwrap, perl, makeDesktopItem, isabelle-components, isabelle, symlinkJoin, fetchhg }:
+{ lib, stdenv, fetchurl, coreutils, nettools, java, scala_3, polyml, z3, veriT, vampire, eprover-ho, naproche, rlwrap, perl, makeDesktopItem, isabelle-components, isabelle, symlinkJoin, fetchhg }:
 # nettools needed for hostname
 
 let
@@ -29,7 +29,7 @@ let
   };
 in stdenv.mkDerivation rec {
   pname = "isabelle";
-  version = "2021-1";
+  version = "2022-RC2";
 
   dirname = "Isabelle${version}";
 
@@ -38,13 +38,13 @@ in stdenv.mkDerivation rec {
     then
       fetchurl
         {
-          url = "https://isabelle.in.tum.de/website-${dirname}/dist/${dirname}_macos.tar.gz";
-          sha256 = "0n1ls9vwf0ps1x8zpb7c1xz1wkasgvc34h5bz280hy2z6iqwmwbc";
+          url = "https://isabelle.sketis.net/website-${dirname}/dist/${dirname}_macos.tar.gz";
+          sha256 = "1iqpf2j6cimc30ff40kcvjr9pmr1y10xhal6fgggj0sqfvffnmws";
         }
     else
       fetchurl {
-        url = "https://isabelle.in.tum.de/website-${dirname}/dist/${dirname}_linux.tar.gz";
-        sha256 = "0jfaqckhg388jh9b4msrpkv6wrd6xzlw18m0bngbby8k8ywalp9i";
+        url = "https://isabelle.sketis.net/website-${dirname}/dist/${dirname}_linux.tar.gz";
+        sha256 = "02qzsgy3hvwras15v33fvckwjx42ddw0xvafzvhm6nhxi00m7wi7";
       };
 
   buildInputs = [ polyml z3 veriT vampire eprover-ho nettools ]
@@ -125,6 +125,9 @@ in stdenv.mkDerivation rec {
     for f in contrib/*/$arch/{bash_process,epclextract,nunchaku,SPASS,zipperposition}; do
       patchelf --set-interpreter $(cat ${stdenv.cc}/nix-support/dynamic-linker) "$f"
     done
+    for f in contrib/*/platform_$arch/{bash_process,epclextract,nunchaku,SPASS,zipperposition}; do
+      patchelf --set-interpreter $(cat ${stdenv.cc}/nix-support/dynamic-linker) "$f"
+    done
     for d in contrib/kodkodi-*/jni/$arch; do
       patchelf --set-rpath "${lib.concatStringsSep ":" [ "${java}/lib/openjdk/lib/server" "${stdenv.cc.cc.lib}/lib" ]}" $d/*.so
     done
@@ -145,10 +148,12 @@ in stdenv.mkDerivation rec {
     do
       ARGS["''${#ARGS[@]}"]="src/Tools/Setup/$SRC"
     done
-    ${java}/bin/javac -d "$TARGET_DIR" -classpath ${scala}/lib/scala-compiler.jar "''${ARGS[@]}"
+    echo "Building isabelle setup"
+    ${java}/bin/javac -d "$TARGET_DIR" -classpath "${scala_3.bare}/lib/scala3-interfaces-${scala_3.version}.jar:${scala_3.bare}/lib/scala3-compiler_3-${scala_3.version}.jar" "''${ARGS[@]}"
     ${java}/bin/jar -c -f "$TARGET_DIR/isabelle_setup.jar" -e "isabelle.setup.Setup" -C "$TARGET_DIR" isabelle
     rm -rf "$TARGET_DIR/isabelle"
 
+    echo "Building HOL heap"
     # Prebuild HOL Session
     bin/isabelle build -v -o system_heaps -b HOL
   '';
