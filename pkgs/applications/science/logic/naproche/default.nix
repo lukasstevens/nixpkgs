@@ -2,13 +2,13 @@
 
 with haskellPackages; mkDerivation {
   pname = "Naproche-SAD";
-  version = "2022-04-19";
+  version = "2022-09-19";
 
   src = fetchFromGitHub {
     owner = "naproche";
     repo = "naproche";
-    rev = "2514c04e715395b7a839e11b63046eafb9c6a1da";
-    sha256 = "1bdgyk4fk65xi7n778rbgddpg4zhggj8wjslxbizrzi81my9a3vm";
+    rev = "64ec081b936a2bd3cce75b4a40013ce2206f2a1d";
+    sha256 = "1adwlgm6w7vjc86i6pvgrj6msl7dbajvq4k7yw51p60ka1w683f7";
   };
 
   isExecutable = true;
