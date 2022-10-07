@@ -1,4 +1,4 @@
-{ lib, stdenv, fetchurl, coreutils, nettools, java, scala_3, polyml, z3, veriT, vampire, eprover-ho, naproche, rlwrap, perl, makeDesktopItem, isabelle-components, isabelle, symlinkJoin, fetchhg }:
+{ lib, stdenv, stdenvNoCC, fetchurl, coreutils, cacert, mercurial, nettools, java, scala_3, polyml, z3, veriT, cvc4, vampire, eprover-ho, naproche, rlwrap, perl, makeDesktopItem, isabelle-components, isabelle, symlinkJoin, fetchhg, unzip }:
 # nettools needed for hostname
 
 let
@@ -29,112 +29,103 @@ let
   };
 in stdenv.mkDerivation rec {
   pname = "isabelle";
-  version = "2022-RC2";
+  version = "2022-RC3";
 
   dirname = "Isabelle${version}";
 
-  src =
-    if stdenv.isDarwin
-    then
-      fetchurl
-        {
-          url = "https://isabelle.sketis.net/website-${dirname}/dist/${dirname}_macos.tar.gz";
-          sha256 = "1iqpf2j6cimc30ff40kcvjr9pmr1y10xhal6fgggj0sqfvffnmws";
-        }
-    else
-      fetchurl {
-        url = "https://isabelle.sketis.net/website-${dirname}/dist/${dirname}_linux.tar.gz";
-        sha256 = "02qzsgy3hvwras15v33fvckwjx42ddw0xvafzvhm6nhxi00m7wi7";
-      };
+  # can't use fetchhg here, because the Isabelle build requires the .hg directory
+  src = stdenvNoCC.mkDerivation rec {
+    name = "${dirname}-source";
 
-  buildInputs = [ polyml z3 veriT vampire eprover-ho nettools ]
+    url = "https://isabelle.sketis.net/repos/isabelle";
+    rev = dirname;
+    sha256 = "sha256-X5VF1a50QkHkDokBWff34OhVHZ4Wi/X9dQvDLt4iOg4=";
+
+    nativeBuildInputs = [ mercurial cacert ];
+    phases = [ "buildPhase" ];
+    buildPhase = ''
+      hg clone -r "$rev" "$url" $out
+    '';
+
+    outputHashAlgo = "sha256";
+    outputHashMode = "recursive";
+    outputHash = sha256;
+  };
+
+  nativeBuildInputs = [ mercurial unzip ];
+
+  buildInputs = [ polyml z3 veriT vampire eprover-ho cvc4 nettools ]
     ++ lib.optionals (!stdenv.isDarwin) [ java ];
 
-  sourceRoot = "${dirname}${lib.optionalString stdenv.isDarwin ".app"}";
+  buildPhase = ''
+    cd ${src.name}
+    export HOME=$(pwd)
+    sed -i 's/\.isabelle\/contrib/contrib/' etc/settings
 
-  postUnpack = if stdenv.isDarwin then ''
-    mv $sourceRoot ${dirname}
-    sourceRoot=${dirname}
-  '' else null;
+    # Set correct build
+    sed -i 's/List(linux, windows, macos)/List(${if stdenv.isDarwin then "macos" else "linux"})/' src/Pure/System/platform.scala
 
-  postPatch = ''
-    patchShebangs .
-
-    cat >contrib/z3*/etc/settings <<EOF
-      Z3_HOME=${z3}
-      Z3_VERSION=${z3.version}
-      Z3_SOLVER=${z3}/bin/z3
-      Z3_INSTALLED=yes
-    EOF
-
-    cat >contrib/verit-*/etc/settings <<EOF
-      ISABELLE_VERIT=${veriT}/bin/veriT
-    EOF
-
-    cat >contrib/e-*/etc/settings <<EOF
-      E_HOME=${eprover-ho}/bin
-      E_VERSION=${eprover-ho.version}
-    EOF
-
-    cat >contrib/vampire-*/etc/settings <<EOF
-      VAMPIRE_HOME=${vampire}/bin
-      VAMPIRE_VERSION=${vampire.version}
-      VAMPIRE_EXTRA_OPTIONS="--mode casc"
-    EOF
-
-    cat >contrib/polyml-*/etc/settings <<EOF
-      ML_SYSTEM_64=true
-      ML_SYSTEM=${polyml.name}
-      ML_PLATFORM=${stdenv.system}
-      ML_HOME=${polyml}/bin
-      ML_OPTIONS="--minheap 1000"
-      POLYML_HOME="\$COMPONENT"
-      ML_SOURCES="\$POLYML_HOME/src"
-    EOF
-
-    cat >contrib/jdk*/etc/settings <<EOF
-      ISABELLE_JAVA_PLATFORM=${stdenv.system}
-      ISABELLE_JDK_HOME=${java}
-    EOF
-
-    rm contrib/naproche-*/x86*/Naproche-SAD
-    ln -s ${naproche}/bin/Naproche-SAD contrib/naproche-*/x86*/
-
-    echo ISABELLE_LINE_EDITOR=${rlwrap}/bin/rlwrap >>etc/settings
-
-    for comp in contrib/jdk* contrib/polyml-* contrib/z3-* contrib/verit-* contrib/vampire-* contrib/e-*; do
-      rm -rf $comp/x86*
-    done
-
-    substituteInPlace lib/Tools/env \
-      --replace /usr/bin/env ${coreutils}/bin/env
-
-    substituteInPlace src/Tools/Setup/src/Environment.java \
-      --replace 'cmd.add("/usr/bin/env");' "" \
-      --replace 'cmd.add("bash");' "cmd.add(\"$SHELL\");"
-
+    # Patch sources to use nix versions
     substituteInPlace src/Pure/General/sha1.ML \
       --replace '"$ML_HOME/" ^ (if ML_System.platform_is_windows then "sha1.dll" else "libsha1.so")' '"${sha1}/lib/libsha1.so"'
 
-    rm -r heaps
-  '' + lib.optionalString (stdenv.hostPlatform.system == "x86_64-darwin") ''
-    substituteInPlace lib/scripts/isabelle-platform \
-      --replace 'ISABELLE_APPLE_PLATFORM64=arm64-darwin' ""
-  '' + (if ! stdenv.isLinux then "" else ''
-    arch=${if stdenv.hostPlatform.system == "x86_64-linux" then "x86_64-linux" else "x86-linux"}
-    for f in contrib/*/$arch/{bash_process,epclextract,nunchaku,SPASS,zipperposition}; do
-      patchelf --set-interpreter $(cat ${stdenv.cc}/nix-support/dynamic-linker) "$f"
-    done
-    for f in contrib/*/platform_$arch/{bash_process,epclextract,nunchaku,SPASS,zipperposition}; do
-      patchelf --set-interpreter $(cat ${stdenv.cc}/nix-support/dynamic-linker) "$f"
-    done
-    for d in contrib/kodkodi-*/jni/$arch; do
-      patchelf --set-rpath "${lib.concatStringsSep ":" [ "${java}/lib/openjdk/lib/server" "${stdenv.cc.cc.lib}/lib" ]}" $d/*.so
-    done
-  '');
+    # Set up bash_process
+    bash_process_folder="contrib/$(grep bash_process < Admin/components/main)"
+    mkdir -p "$bash_process_folder/etc"
+    echo "ISABELLE_BASH_PROCESS_HOME=\"\$COMPONENT\"
+    ISABELLE_BASH_PROCESS=\"\$ISABELLE_BASH_PROCESS_HOME/bash_process\"" > $bash_process_folder/etc/settings
+    cc -Wall Admin/bash_process/bash_process.c -o "$bash_process_folder/bash_process"
 
-  buildPhase = ''
-    export HOME=$TMP # The build fails if home is not set
+    # Set up jdk
+    jdk_folder="contrib/$(grep jdk < Admin/components/main)/etc"
+    mkdir -p "$jdk_folder"
+    echo 'ISABELLE_JAVA_PLATFORM=${stdenv.system}
+    ISABELLE_JDK_HOME=${java}' > $jdk_folder/settings
+    hg add contrib/jdk*
+
+    mkdir -p contrib/polyml
+    cp Admin/polyml/README contrib/polyml/
+    hg add contrib/polyml/README
+
+    sed -E -i '/^(polyml|cvc4|e|verit|z3|vampire)-/d' Admin/components/main
+
+    settings='
+    ML_SYSTEM_64=true
+    ML_SYSTEM=${polyml.name}
+    ML_PLATFORM=${stdenv.system}
+    ML_HOME=${polyml}/bin
+    ML_OPTIONS="--minheap 1000"
+    POLYML_HOME="$ISABELLE_HOME/contrib/polyml"
+    ML_SOURCES="${polyml.src}"
+
+    CVC4_HOME="${cvc4}/bin"
+    CVC4_VERSION="${cvc4.version}"
+    CVC4_SOLVER="${cvc4}/bin/cvc4"
+    CVC4_INSTALLED="yes"
+
+    E_HOME="${eprover-ho}/bin"
+    E_VERSION="${eprover-ho.version}"
+
+    ISABELLE_VERIT="${veriT}/bin/veriT"
+
+    Z3_HOME="${z3}"
+    Z3_VERSION="${z3.version}"
+    Z3_SOLVER="${z3}/bin/z3"
+    Z3_INSTALLED="yes"
+
+    VAMPIRE_HOME="${vampire}/bin"
+    VAMPIRE_VERSION="${vampire.version}"
+    VAMPIRE_EXTRA_OPTIONS="--mode casc"
+    '
+
+    echo "$settings" >> etc/settings
+    echo "$settings" >> Admin/etc/settings
+
+    # Save changes to source
+    hg commit -m "Patches for nixpkgs" -u git@github.com
+
+    $shell ./Admin/init
+
     setup_name=$(basename contrib/isabelle_setup*)
 
     #The following is adapted from https://isabelle.sketis.net/repos/isabelle/file/Isabelle2021-1/Admin/lib/Tools/build_setup
@@ -142,7 +133,6 @@ in stdenv.mkDerivation rec {
     rm -rf "$TARGET_DIR"
     mkdir -p "$TARGET_DIR/isabelle/setup"
     declare -a ARGS=("-Xlint:unchecked")
-
     SOURCES="$(${perl}/bin/perl -e 'while (<>) { if (m/(\S+\.java)/)  { print "$1 "; } }' "src/Tools/Setup/etc/build.props")"
     for SRC in $SOURCES
     do
@@ -153,24 +143,22 @@ in stdenv.mkDerivation rec {
     ${java}/bin/jar -c -f "$TARGET_DIR/isabelle_setup.jar" -e "isabelle.setup.Setup" -C "$TARGET_DIR" isabelle
     rm -rf "$TARGET_DIR/isabelle"
 
-    echo "Building HOL heap"
-    # Prebuild HOL Session
-    bin/isabelle build -v -o system_heaps -b HOL
+    #$shell ./Admin/build_release
   '';
 
   installPhase = ''
-    mkdir -p $out/bin
-    mv $TMP/$dirname $out
-    cd $out/$dirname
-    bin/isabelle install $out/bin
+    tar -xzf dist-Isabelle*/Isabelle_*_*.tar.gz --directory $out
+    mv $out/Isabelle_* $out/${dirname}
+    contrib_dir=$out/${dirname}/contrib
+    rm -r $contrib_dir/jdk-*
+    rm -r $contrib_dir/bash_process-*
+    rm $contrib_dir/*.tar.gz
+    cp -r contrib/jdk-* $contrib_dir/
+    cp -r contrib/bash_process-* $contrib_dir/
+    cd $out/${dirname}
 
-    # icon
-    mkdir -p "$out/share/icons/hicolor/isabelle/apps"
-    cp "$out/Isabelle${version}/lib/icons/isabelle.xpm" "$out/share/icons/hicolor/isabelle/apps/"
-
-    # desktop item
-    mkdir -p "$out/share"
-    cp -r "${desktopItem}/share/applications" "$out/share/applications"
+    export HOME=$TMP
+    bin/isabelle build -v -o system_heaps -b HOL
   '';
 
   desktopItem = makeDesktopItem {
