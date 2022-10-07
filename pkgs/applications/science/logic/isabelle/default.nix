@@ -1,4 +1,4 @@
-{ lib, stdenv, stdenvNoCC, fetchurl, coreutils, cacert, mercurial, nettools, java, scala_3, polyml, z3, veriT, cvc4, vampire, eprover-ho, naproche, rlwrap, perl, makeDesktopItem, isabelle-components, isabelle, symlinkJoin, fetchhg, unzip }:
+{ lib, stdenv, stdenvNoCC, fetchurl, coreutils, cacert, mercurial, nettools, java, scala_3, polyml, z3, veriT, cvc4, vampire, eprover-ho, naproche, rlwrap, perl, makeDesktopItem, isabelle-components, isabelle, symlinkJoin, fetchhg, unzip, curl, spass }:
 # nettools needed for hostname
 
 let
@@ -34,17 +34,23 @@ in stdenv.mkDerivation rec {
   dirname = "Isabelle${version}";
 
   # can't use fetchhg here, because the Isabelle build requires the .hg directory
+  # and we also need to fetch the prebuilt components
   src = stdenvNoCC.mkDerivation rec {
     name = "${dirname}-source";
 
     url = "https://isabelle.sketis.net/repos/isabelle";
     rev = dirname;
-    sha256 = "sha256-X5VF1a50QkHkDokBWff34OhVHZ4Wi/X9dQvDLt4iOg4=";
+    sha256 = "sha256-L74mB7B83oXb4GtrsoT6nvv1GURgi5rjFkS1UJEQsvk=";
 
-    nativeBuildInputs = [ mercurial cacert ];
+    nativeBuildInputs = [ mercurial curl cacert ];
     phases = [ "buildPhase" ];
     buildPhase = ''
       hg clone -r "$rev" "$url" $out
+      cd $out
+      patchShebangs .
+      export HOME=$TMP
+      bin/isabelle components -I
+      bin/isabelle components -a
     '';
 
     outputHashAlgo = "sha256";
@@ -52,13 +58,17 @@ in stdenv.mkDerivation rec {
     outputHash = sha256;
   };
 
-  nativeBuildInputs = [ mercurial unzip ];
+  nativeBuildInputs = [ mercurial unzip curl cacert ];
 
   buildInputs = [ polyml z3 veriT vampire eprover-ho cvc4 nettools ]
     ++ lib.optionals (!stdenv.isDarwin) [ java ];
 
+  postPatch = ''
+    patchShebangs .
+  '';
+
   buildPhase = ''
-    cd ${src.name}
+    ls -al
     export HOME=$(pwd)
     sed -i 's/\.isabelle\/contrib/contrib/' etc/settings
 
@@ -87,7 +97,7 @@ in stdenv.mkDerivation rec {
     cp Admin/polyml/README contrib/polyml/
     hg add contrib/polyml/README
 
-    sed -E -i '/^(polyml|cvc4|e|verit|z3|vampire)-/d' Admin/components/main
+    sed -E -i '/^(polyml|cvc4|e|verit|z3|vampire|spass)-/d' Admin/components/main
 
     settings='
     ML_SYSTEM_64=true
@@ -116,16 +126,19 @@ in stdenv.mkDerivation rec {
     VAMPIRE_HOME="${vampire}/bin"
     VAMPIRE_VERSION="${vampire.version}"
     VAMPIRE_EXTRA_OPTIONS="--mode casc"
+
+    SPASS_HOME="${spass}/bin"
+    SPASS_VERSION="${spass.version}"
     '
 
     echo "$settings" >> etc/settings
     echo "$settings" >> Admin/etc/settings
 
-    # Save changes to source
-    hg commit -m "Patches for nixpkgs" -u git@github.com
-
     $shell ./Admin/init
 
+    substituteInPlace src/Tools/Setup/src/Environment.java \
+      --replace 'cmd.add("/usr/bin/env");' "" \
+      --replace 'cmd.add("bash");' "cmd.add(\"$SHELL\");"
     setup_name=$(basename contrib/isabelle_setup*)
 
     #The following is adapted from https://isabelle.sketis.net/repos/isabelle/file/Isabelle2021-1/Admin/lib/Tools/build_setup
@@ -143,7 +156,10 @@ in stdenv.mkDerivation rec {
     ${java}/bin/jar -c -f "$TARGET_DIR/isabelle_setup.jar" -e "isabelle.setup.Setup" -C "$TARGET_DIR" isabelle
     rm -rf "$TARGET_DIR/isabelle"
 
-    #$shell ./Admin/build_release
+    # Save changes to source
+    hg commit -m "Patches for nixpkgs" -u git@github.com
+
+    $shell ./Admin/build_release
   '';
 
   installPhase = ''
@@ -152,7 +168,6 @@ in stdenv.mkDerivation rec {
     contrib_dir=$out/${dirname}/contrib
     rm -r $contrib_dir/jdk-*
     rm -r $contrib_dir/bash_process-*
-    rm $contrib_dir/*.tar.gz
     cp -r contrib/jdk-* $contrib_dir/
     cp -r contrib/bash_process-* $contrib_dir/
     cd $out/${dirname}
