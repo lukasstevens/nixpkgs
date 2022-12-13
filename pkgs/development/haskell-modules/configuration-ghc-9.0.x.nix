@@ -150,4 +150,10 @@ self: super: {
 
   # Restrictive upper bound on base and containers
   sv2v = doJailbreak super.sv2v;
+
+  # Test suite requires z3 and the `dot` executable
+  rest-rewrite = super.rest-rewrite.overrideAttrs (old: {
+    preCheck = "mkdir graphs";
+    nativeBuildInputs = old.nativeBuildInputs ++ [ pkgs.z3 pkgs.graphviz ];
+  });
 }
