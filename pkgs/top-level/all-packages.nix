@@ -38908,14 +38908,14 @@ with pkgs;
   isabelle = callPackage ../applications/science/logic/isabelle {
     polyml = polyml.overrideAttrs {
       pname = "polyml-for-isabelle";
-      version = "2022";
+      version = "2023";
       configureFlags = [ "--enable-intinf-as-int" "--with-gmp" "--disable-shared" ];
       buildFlags = [ "compiler" ];
       src = fetchFromGitHub {
         owner = "polyml";
         repo = "polyml";
-        rev = "bafe319bc3a65bf63bd98a4721a6f4dd9e0eabd6";
-        sha256 = "1ygs09zzq8icq1gc8qf4sb24lxx7sbcyd5hw3vw67a3ryaki0qw2";
+        rev = "219e0a248f705b770d45699755d00f05b82a9391";
+        sha256 = "sha256-HtT3MGtHrqVhynmx73L7NC12AW9N7gkkOi7MKbF4k6Y=";
       };
     };
 
