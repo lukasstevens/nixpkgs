@@ -46,7 +46,7 @@ let
   };
 in stdenv.mkDerivation (finalAttrs: rec {
   pname = "isabelle";
-  version = "2023-RC3";
+  version = "2023";
 
   dirname = "Isabelle${version}";
 
@@ -62,7 +62,7 @@ in stdenv.mkDerivation (finalAttrs: rec {
     then
       fetchurl {
         url = "https://isabelle.in.tum.de/website-${dirname}/dist/${dirname}_linux.tar.gz";
-        sha256 = "sha256-HlfQZnCTzC+Q3CB3849efpyi2v9JfyIW+idL9fmOEXs=";
+        sha256 = "0d1z2k65y5bc1zc6sy73v7vr7krlg7iyiaajfkvvrji5spcn4s9m";
       }
     else
       fetchurl {
