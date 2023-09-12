@@ -62,7 +62,7 @@ in stdenv.mkDerivation (finalAttrs: rec {
     then
       fetchurl {
         url = "https://isabelle.in.tum.de/website-${dirname}/dist/${dirname}_linux.tar.gz";
-        sha256 = "0d1z2k65y5bc1zc6sy73v7vr7krlg7iyiaajfkvvrji5spcn4s9m";
+        sha256 = "1a26fxzab7862iynzw7mylq5vrr4rnx59fb1p5xh5rpkq051k3hs";
       }
     else
       fetchurl {
