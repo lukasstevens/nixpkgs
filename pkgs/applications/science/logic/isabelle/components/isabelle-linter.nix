@@ -2,13 +2,13 @@
 
 stdenv.mkDerivation rec {
   pname = "isabelle-linter";
-  version = "2023-RC1";
+  version = "2023";
 
   src = fetchFromGitHub {
     owner = "isabelle-prover";
     repo = "isabelle-linter";
-    rev = "43464c9c440a7ba608a8cb1d31f47ca95602acde";
-    sha256 = "sha256-q9+qN94NaTzvhbcNQj7yH/VVfs1QgCH8OU8HW+5+s9U=";
+    rev = "Isabelle2023-v1.0.0";
+    sha256 = "1mdkgvp5n1sg77y2302hrmz5bx8zy8z443dphppkqs8dvqvsmpxb";
   };
 
   nativeBuildInputs = [ isabelle ];
